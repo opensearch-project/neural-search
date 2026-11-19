@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.opensearch.action.search.SearchPhaseContext;
@@ -48,6 +47,7 @@ import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 import static org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil.getCollapseFieldType;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.getShardSortFields;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -176,20 +176,12 @@ public class NormalizationProcessorWorkflow {
         List<FieldDoc> searchAfterPerShard = new ArrayList<>(querySearchResults.size());
         for (QuerySearchResult querySearchResult : querySearchResults) {
             SortAndFormats shardSortAndFormats = new SortAndFormats(
-                new Sort(getShardSortFields(querySearchResult, sort)),
+                new Sort(getShardSortFields(querySearchResult.topDocs().topDocs, sort)),
                 querySearchResult.sortValueFormats()
             );
             searchAfterPerShard.add(SearchAfterBuilder.buildFieldDoc(shardSortAndFormats, searchAfter));
         }
         return searchAfterPerShard;
-    }
-
-    /**
-     * The sort fields a shard collected with, typed by that shard's own mapping; {@code sort} for a result that carries none.
-     */
-    private SortField[] getShardSortFields(final QuerySearchResult querySearchResult, final Sort sort) {
-        TopDocs topDocs = querySearchResult.topDocs().topDocs;
-        return topDocs instanceof TopFieldDocs topFieldDocs ? topFieldDocs.fields : sort.getSort();
     }
 
     /**
@@ -356,7 +348,7 @@ public class NormalizationProcessorWorkflow {
             return new TopFieldDocs(
                 updatedTopDocs.getTotalHits(),
                 updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]),
-                getShardSortFields(querySearchResult, sort)
+                getShardSortFields(querySearchResult.topDocs().topDocs, sort)
             );
         }
         return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));

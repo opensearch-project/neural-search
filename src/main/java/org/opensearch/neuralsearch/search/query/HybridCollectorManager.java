@@ -231,10 +231,10 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             // between equal combined scores (a stable search_after cursor, a deterministic collapse group head). A field-primary
             // sort would ask for an order no sub-query can collect by, and an ascending _score would put the least relevant
             // documents first, which hybrid never collects (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
-            if (!HybridSearchCollapseUtil.isScorePrimarySort(sortFields)) {
+            if (HybridSearchCollapseUtil.isScorePrimarySort(sortFields) == false) {
                 throw new IllegalArgumentException("_score must be the primary sort key when combined with a field in a hybrid query");
             }
-            if (!HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields)) {
+            if (HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields) == false) {
                 throw new IllegalArgumentException("_score must be sorted descending when combined with a field in a hybrid query");
             }
         }

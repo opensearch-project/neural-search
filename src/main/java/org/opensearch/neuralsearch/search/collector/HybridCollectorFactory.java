@@ -104,16 +104,16 @@ public class HybridCollectorFactory {
                 return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
             } else {
                 // Sorting is applied
-                if (after == null) {
-                    return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+                if (after != null) {
+                    // search_after is applied
+                    validateSearchAfterFieldAndSortFormats(sortAndFormats, after);
                 }
-                // search_after is applied
-                validateSearchAfterFieldAndSortFormats(sortAndFormats, after);
-                if (HybridSearchCollapseUtil.isScorePrimarySort(sortAndFormats.sort.getSort())) {
-                    // The cursor's score is the normalized, combined score that only exists on the coordinator after the
-                    // normalization processor has run; a shard cannot compare its raw sub-query scores against it. The shard
-                    // therefore collects its full window (pagination_depth per sub-query, as for the first page) and the
-                    // normalization processor applies the cursor once the combined scores are known.
+                // No cursor to apply on the shard, or a _score-led one: the cursor's score is the normalized, combined score
+                // that only exists on the coordinator after the normalization processor has run, and a shard cannot compare its
+                // raw sub-query scores against it. The shard therefore collects its full window (pagination_depth per
+                // sub-query, as for the first page) and the normalization processor applies the cursor once the combined scores
+                // are known.
+                if (after == null || HybridSearchCollapseUtil.isScorePrimarySort(sortAndFormats.sort.getSort())) {
                     return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
                 }
                 return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);

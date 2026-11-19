@@ -198,10 +198,10 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
          * Hands the current document's score for one sub-query to that sub-query's SCORE comparator. Must be called before any
          * comparison or copy for that sub-query on the current document, which is after
          * {@link #initializePriorityQueuesWithComparators} has wrapped every sub-query's SCORE comparator for the segment; a
-         * no-op unless _score is the primary sort key.
+         * no-op unless _score is the primary sort key, as the wrappers exist only then.
          */
         protected void setCurrentSubQueryScore(int subQueryNumber, float score) {
-            if (isSortByScore) {
+            if (scoreComparators != null) {
                 scoreComparators[subQueryNumber].setCurrentSubQueryScore(score);
             }
         }
@@ -232,7 +232,10 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
             if (needsInitialization) {
                 compoundScores = new FieldValueHitQueue[numberOfSubQueries];
                 comparators = new LeafFieldComparator[numberOfSubQueries];
-                scoreComparators = new HybridLeafFieldComparator[numberOfSubQueries];
+                // stays null unless _score is the primary sort key, which is the only case with a SCORE comparator to wrap
+                if (isSortByScore) {
+                    scoreComparators = new HybridLeafFieldComparator[numberOfSubQueries];
+                }
                 queueFull = new boolean[numberOfSubQueries];
                 collectedHits = new int[numberOfSubQueries];
                 for (int i = 0; i < numberOfSubQueries; i++) {
@@ -277,12 +280,13 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
 
             LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
             int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
-            HybridLeafFieldComparator scoreWrapper = null;
             if (isSortByScore) {
                 // _score is the primary key (index 0): wrap ONLY that child so it is fed the per-sub-query score; a field child
                 // stays plain, its value does not depend on the sub-query
-                scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                assert sort.getSort()[0].getType() == SortField.Type.SCORE : "the wrapped child comparator must be _score's";
+                HybridLeafFieldComparator scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
                 leafFieldComparators[0] = scoreWrapper;
+                scoreComparators[subQueryNumber] = scoreWrapper;
             }
             if (leafFieldComparators.length == 1) {
                 reverseMul = reverseMuls[0];
@@ -291,7 +295,6 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 reverseMul = 1;
                 comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
             }
-            scoreComparators[subQueryNumber] = scoreWrapper;
             comparators[subQueryNumber].setScorer(compoundQueryScorer);
         }
 
