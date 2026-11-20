@@ -1353,26 +1353,31 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      * The constant itself, not the gate built on it. Every mixed-cluster protection fused mode has — the coordinator's
      * refusal, and the {@code fusion} presence flag {@code HybridQueryBuilder#doWriteTo} writes on the shard wire — is
      * only as good as {@code MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY} naming a release that actually
-     * contains fused mode. While it does not ship, the only version that can be true of is the one under development, so
-     * the constant must not fall behind {@code Version.CURRENT}: a released version below it is a version whose nodes
-     * pass the gate, cannot resolve {@code hybrid_fusion} or {@code hybrid_fused_window_guard}, and — because the
-     * presence flag is written whether or not the query uses fused mode — cannot read a plain classic {@code hybrid}
-     * off the wire either.
+     * contains fused mode. A node below the constant that still passed the gate could not resolve {@code hybrid_fusion}
+     * or {@code hybrid_fused_window_guard}, and — because the presence flag is written whether or not the query uses
+     * fused mode — could not read a plain classic {@code hybrid} off the wire either.
      *
-     * <p>Deliberately fails when the branch's core version moves past the constant, which is the moment the constant
-     * has to be raised with it — the decision itself is tracked by
-     * <a href="https://github.com/opensearch-project/neural-search/issues/2002">issue 2002</a> and taken when the feature
-     * branch merges. Delete this test in the release that actually ships fused mode: from then on the constant names a
-     * real released version and {@code Version.CURRENT} is legitimately ahead of it.
+     * <p>Fused mode shipped in 3.10.0, so the constant now names a released version and {@code Version.CURRENT} is
+     * legitimately ahead of it. What is left to hold is that the constant does not move, and it is worth holding because
+     * it is wrong in both directions: raising it refuses fused mode on 3.10 nodes that can run it, and lowering it admits
+     * nodes with no fused-mode code to a wire that carries the presence flag. A constant ahead of
+     * {@code Version.CURRENT} is the degenerate case of raising it — no node in the cluster can pass a gate naming a
+     * version that does not exist yet, so fused mode would be refused everywhere.
      */
-    public void testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment() {
-        assertTrue(
+    public void testFusedModeMinimumVersion_namesTheReleaseThatShippedFusedMode() {
+        assertFalse(
             "["
                 + MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY
-                + "] is behind the version under development ["
+                + "] is ahead of the version under development ["
                 + Version.CURRENT
-                + "], so it names a release that cannot contain fused mode",
-            MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY.onOrAfter(Version.CURRENT)
+                + "], so no node could pass the gate and fused mode would be refused everywhere",
+            MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY.after(Version.CURRENT)
+        );
+        assertEquals(
+            "fused mode shipped in 3.10.0, so this gate is frozen: raising it refuses fused mode on 3.10 nodes that can "
+                + "run it, and lowering it admits nodes that cannot read the fusion presence flag",
+            Version.V_3_10_0,
+            MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY
         );
     }
 
