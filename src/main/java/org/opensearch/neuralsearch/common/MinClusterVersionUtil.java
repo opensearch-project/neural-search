@@ -42,8 +42,10 @@ public final class MinClusterVersionUtil {
     // The release that ships a hybrid query sorted by _score and a field without collapse. A node before it neither orders such
     // a page by the combined score nor applies its search_after cursor after combination, while a data node from it collects
     // the whole window for the cursor, so a mixed cluster would page wrong both ways. Held to by
-    // HybridCollectorManagerTests#testScoreAndFieldSortMinimumVersion_isNotBehindTheVersionUnderDevelopment.
-    public static final Version MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY = Version.V_3_10_0;
+    // HybridCollectorManagerTests#testScoreAndFieldSortMinimumVersion_isNotBehindTheVersionUnderDevelopment, and across a real
+    // mixed cluster by the rolling-upgrade HybridSearchWithScoreAndFieldSortIT (the restart upgrade has no mixed phase, so it
+    // cannot exercise the gate).
+    public static final Version MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY = Version.V_3_11_0;
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
