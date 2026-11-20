@@ -32,11 +32,14 @@ import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.searchafter.SearchAfterBuilder;
+import org.opensearch.search.sort.SortAndFormats;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -44,6 +47,7 @@ import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 import static org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil.getCollapseFieldType;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.getShardSortFields;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -96,15 +100,17 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(normalizeScoresDTO);
 
+        Sort sort = evaluateSortCriteria(querySearchResults, queryTopDocs);
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
             .scoreCombinationTechnique(request.getCombinationTechnique())
             .querySearchResults(querySearchResults)
-            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .sort(sort)
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
             .minScore(minScore)
             .isCollapseEnabled(request.searchPhaseContext.getRequest().source().collapse() != null)
+            .searchAfterPerShard(getScoreSortedSearchAfterPerShard(request, sort, querySearchResults))
             .build();
 
         // combine
@@ -143,6 +149,39 @@ public class NormalizationProcessorWorkflow {
                 String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore)
             );
         }
+    }
+
+    /**
+     * The request's {@code search_after} cursor for every shard result, in the order of {@code querySearchResults}, when the
+     * sort is led by {@code _score}; {@code null} otherwise. A {@code _score}-led cursor compares against the combined score,
+     * which exists only here after normalization and combination, so the shards collected their full window and left the
+     * cursor to this workflow. Each shard's cursor is typed with that shard's own sort fields and formats, as core types it on
+     * a shard: the indices behind one search can map the tie-breaker field differently (e.g. integer and long). A cursor of a
+     * sort that is not led by {@code _score} is not this workflow's to apply.
+     */
+    private List<FieldDoc> getScoreSortedSearchAfterPerShard(
+        final NormalizationProcessorWorkflowExecuteRequest request,
+        final Sort sort,
+        final List<QuerySearchResult> querySearchResults
+    ) {
+        if (Objects.isNull(sort) || HybridSearchCollapseUtil.isScorePrimarySort(sort.getSort()) == false) {
+            return null;
+        }
+        // collapse needs no check: core accepts search_after with collapse only when the sort is the collapse field alone
+        Object[] searchAfter = request.getSearchPhaseContext().getRequest().source().searchAfter();
+        if (Objects.isNull(searchAfter)) {
+            return null;
+        }
+        // the same conversion core applies on a shard: each cursor value is parsed with its sort field's type and format
+        List<FieldDoc> searchAfterPerShard = new ArrayList<>(querySearchResults.size());
+        for (QuerySearchResult querySearchResult : querySearchResults) {
+            SortAndFormats shardSortAndFormats = new SortAndFormats(
+                new Sort(getShardSortFields(querySearchResult.topDocs().topDocs, sort)),
+                querySearchResult.sortValueFormats()
+            );
+            searchAfterPerShard.add(SearchAfterBuilder.buildFieldDoc(shardSortAndFormats, searchAfter));
+        }
+        return searchAfterPerShard;
     }
 
     /**
@@ -260,7 +299,7 @@ public class NormalizationProcessorWorkflow {
                 CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
                 totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
                 TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                    buildTopDocs(updatedTopDocs, sort),
+                    buildTopDocs(updatedTopDocs, sort, querySearchResult),
                     NormalizationProcessorWorkflowUtil.maxScoreForShard(updatedTopDocs, sort != null)
                 );
                 // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
@@ -299,11 +338,18 @@ public class NormalizationProcessorWorkflow {
      * Get Top Docs on Shard
      * @param updatedTopDocs compound top docs on a shard
      * @param sort  sort criteria
+     * @param querySearchResult the shard's result: the top docs keep the sort fields the shard collected with, because core
+     *                          merges the shards' sorted top docs and widens a numeric sort field only when it sees the shards'
+     *                          indices map it with different types
      * @return TopDocs which will be instance of TopFieldDocs  if sort is enabled.
      */
-    private TopDocs buildTopDocs(CompoundTopDocs updatedTopDocs, Sort sort) {
+    private TopDocs buildTopDocs(CompoundTopDocs updatedTopDocs, Sort sort, QuerySearchResult querySearchResult) {
         if (sort != null) {
-            return new TopFieldDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]), sort.getSort());
+            return new TopFieldDocs(
+                updatedTopDocs.getTotalHits(),
+                updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]),
+                getShardSortFields(querySearchResult.topDocs().topDocs, sort)
+            );
         }
         return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
     }

@@ -18,6 +18,7 @@ import java.util.LinkedHashSet;
 
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.TopDocs;
@@ -26,13 +27,18 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
+import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.search.query.HybridQueryFieldDocComparator;
 import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
+
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.getShardSortFields;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -55,6 +61,8 @@ public class ScoreCombiner {
         // When duplicate result found then both score and doc ID are equal (o1.score == o2.score && o1.doc == o2.doc) then return 1
         return 1;
     };
+    // Documents of one shard that are equal on every sort value keep doc id order, as in a Lucene sorted collector
+    private static final Comparator<ScoreDoc> DOC_ID_TIE_BREAKER = Comparator.comparingInt(scoreDoc -> scoreDoc.doc);
 
     /**
      * Performs score combination based on input combination technique. Mutates input object by updating combined scores
@@ -76,10 +84,23 @@ public class ScoreCombiner {
         Sort sort = combineScoresDTO.getSort();
         Float minScore = combineScoresDTO.getMinScore();
         boolean isSingleShard = combineScoresDTO.isSingleShard();
-        combineScoresDTO.getQueryTopDocs()
-            .forEach(
-                compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort, isSingleShard, minScore)
+        List<CompoundTopDocs> queryTopDocs = combineScoresDTO.getQueryTopDocs();
+        // one cursor per shard result, in the order of queryTopDocs: both lists are built from the same querySearchResults, in
+        // that order, and NormalizationProcessorWorkflow#getQueryTopDocs fails the request when their sizes disagree, so a
+        // cursor is paired with the shard it was typed from
+        List<FieldDoc> searchAfterPerShard = combineScoresDTO.getSearchAfterPerShard();
+        assert Objects.isNull(searchAfterPerShard) || searchAfterPerShard.size() == queryTopDocs.size()
+            : "a search_after cursor per shard is required, got " + searchAfterPerShard.size() + " for " + queryTopDocs.size();
+        for (int shardIndex = 0; shardIndex < queryTopDocs.size(); shardIndex++) {
+            combineShardScores(
+                scoreCombinationTechnique,
+                queryTopDocs.get(shardIndex),
+                sort,
+                isSingleShard,
+                minScore,
+                Objects.isNull(searchAfterPerShard) ? null : searchAfterPerShard.get(shardIndex)
             );
+        }
     }
 
     private void combineShardScores(
@@ -87,7 +108,8 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort,
         final boolean isSingleShard,
-        final Float minScore
+        final Float minScore,
+        final FieldDoc searchAfter
     ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return;
@@ -105,9 +127,19 @@ public class ScoreCombiner {
             sort
         );
 
+        Map<Integer, Object[]> docIdSortFieldMap = getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort);
+
         // - sort documents by scores and take first "max number" of docs
-        // create a collection of doc ids that are sorted by their combined scores
-        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId, minScore);
+        // create a collection of doc ids that are sorted by their combined scores, with a _score-led search_after cursor
+        // applied once the combined score it compares against is known
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(
+            compoundQueryTopDocs,
+            sort,
+            combinedNormalizedScoresByDocId,
+            docIdSortFieldMap,
+            minScore,
+            searchAfter
+        );
 
         // - get new total hits
         long maxHits = compoundQueryTopDocs.getTotalHits().value();
@@ -125,11 +157,58 @@ public class ScoreCombiner {
             topDocsPerSubQuery,
             combinedNormalizedScoresByDocId,
             sortedDocsIds,
-            getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
+            docIdSortFieldMap,
             sort,
             isSingleShard,
             newTotalHits
         );
+    }
+
+    /**
+     * Whether the page of this shard is ordered by the combined score with the trailing sort fields as tie-breakers: a
+     * {@code _score}-led sort without collapse. With collapse the collapse executor orders the groups itself.
+     */
+    private boolean isCombinedScoreOrdered(final Sort sort, final List<TopDocs> topDocsPerSubQuery) {
+        return isSortOrderByScore(sort) && isCollapseTopDocs(topDocsPerSubQuery) == false;
+    }
+
+    private boolean isCollapseTopDocs(final List<TopDocs> topDocsPerSubQuery) {
+        return topDocsPerSubQuery.isEmpty() == false && topDocsPerSubQuery.getFirst() instanceof CollapseTopFieldDocs;
+    }
+
+    /**
+     * A shard's documents in the order of a {@code _score}-led sort over the values the response reports — the combined score,
+     * then the shard's field values, then the doc id — starting after {@code searchAfter} when one is given. Every sub-query's
+     * list is in the order of that sub-query's own score, so once the combined score is what is compared, the lists are no
+     * longer sorted runs and cannot be merged as such; they are re-sorted here instead.
+     * <p>
+     * The cursor is compared on the sort values alone, which makes the documents that are equal to it on every sort value, and
+     * every document before it, a prefix of this order: the doc id only orders documents that are already equal on every sort
+     * value, so it cannot separate them. Dropping that prefix therefore leaves exactly the documents strictly after the
+     * cursor, which is what {@code search_after} asks for, as it is exclusive.
+     *
+     * @param searchAfter the cursor, typed with this shard's sort fields, or {@code null} to order without cutting
+     */
+    private Collection<Integer> sortedAfterCursor(
+        final List<TopDocs> topDocsPerSubQuery,
+        final Sort sort,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Map<Integer, Object[]> docIdSortFieldMap,
+        @Nullable final FieldDoc searchAfter
+    ) {
+        if (combinedNormalizedScoresByDocId.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+        SortField[] shardSortFields = getShardSortFields(topDocsPerSubQuery.getFirst(), sort);
+        Stream<FieldDoc> ordered = combinedNormalizedScoresByDocId.keySet()
+            .stream()
+            .map(docId -> new FieldDoc(docId, combinedNormalizedScoresByDocId.get(docId), docIdSortFieldMap.get(docId)))
+            .sorted(new HybridQueryFieldDocComparator(shardSortFields, DOC_ID_TIE_BREAKER));
+        if (Objects.nonNull(searchAfter)) {
+            HybridQueryFieldDocComparator cursorComparator = new HybridQueryFieldDocComparator(shardSortFields, (first, second) -> 0);
+            ordered = ordered.dropWhile(fieldDoc -> cursorComparator.compare(fieldDoc, searchAfter) <= 0);
+        }
+        return ordered.map(fieldDoc -> fieldDoc.doc).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private static TotalHits getTotalHits(
@@ -483,8 +562,16 @@ public class ScoreCombiner {
             sort
         );
 
-        // sort combined scores as per sorting criteria - either score desc or field sorting
-        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId, minScore);
+        // sort combined scores as per sorting criteria - either score desc or field sorting. Explanations are built for every
+        // document of the shard's window, so no search_after cursor is applied here
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(
+            compoundQueryTopDocs,
+            sort,
+            combinedNormalizedScoresByDocId,
+            getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
+            minScore,
+            null
+        );
 
         List<ExplanationDetails> listOfExplanations = new ArrayList<>();
         String combinationDescription = String.format(
@@ -507,11 +594,21 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final Float minScore
+        final Map<Integer, Object[]> docIdSortFieldMap,
+        final Float minScore,
+        @Nullable final FieldDoc searchAfter
     ) {
         Collection<Integer> sortedDocsIds;
         if (sort != null) {
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+            // a _score-led sort orders by the combined score (ties broken by the trailing fields); a field sort merges the
+            // shard's own sort values, and with collapse the collapse executor orders the groups later
+            if (isCombinedScoreOrdered(sort, topDocsPerSubQuery)) {
+                return sortedAfterCursor(topDocsPerSubQuery, sort, combinedNormalizedScoresByDocId, docIdSortFieldMap, searchAfter);
+            }
+            // a cursor reaches this method only for the order the branch just returned: it is built only for a _score-primary
+            // sort, and core sends search_after with collapse only when the sort is the collapse field alone
+            assert Objects.isNull(searchAfter) : "a search_after cursor is only applied on a combined-score ordered page";
             Predicate<Integer> docIdFilter = isMinScoreAvailable(minScore, sort) ? combinedNormalizedScoresByDocId::containsKey : null;
             sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery, docIdFilter), sort);
         } else {

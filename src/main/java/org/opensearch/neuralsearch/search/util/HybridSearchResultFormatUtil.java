@@ -8,8 +8,11 @@ import java.util.Objects;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.SortedNumericSortField;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.util.BytesRef;
 
 /**
@@ -20,6 +23,18 @@ public class HybridSearchResultFormatUtil {
     // and OpenSearch convention is that scores are positive numbers
     public static final Float MAGIC_NUMBER_START_STOP = -9549511920.4881596047f;
     public static final Float MAGIC_NUMBER_DELIMITER = -4422440593.9791198149f;
+
+    /**
+     * The sort fields a shard collected with, read from the shard's own top docs so that they carry the types of that
+     * shard's mapping: the indices behind one search can map the same field differently (for example an integer in one and
+     * a long in another), and core widens a numeric sort field only when it sees the shards disagree.
+     * @param topDocs top docs of one shard, of any sub-query; every sub-query of a shard carries the same sort fields
+     * @param sort the request sort, used for a result whose top docs carry no sort fields
+     * @return the shard's sort fields, or the request's when the top docs are not sorted
+     */
+    public static SortField[] getShardSortFields(final TopDocs topDocs, final Sort sort) {
+        return topDocs instanceof TopFieldDocs topFieldDocs ? topFieldDocs.fields : sort.getSort();
+    }
 
     /**
      * Create ScoreDoc object that is a start/stop element in case of hybrid search query results

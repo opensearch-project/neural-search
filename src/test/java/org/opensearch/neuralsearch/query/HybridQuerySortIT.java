@@ -21,6 +21,8 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
+
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -246,8 +248,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         fieldSortOrderMap.put("stock", SortOrder.DESC);
         fieldSortOrderMap.put("_score", SortOrder.DESC);
         assertThrows(
-            "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
-                + "primary, descending key. Please select one sort criteria out of them.",
+            "_score must be the primary sort key when combined with a field in a hybrid query",
             ResponseException.class,
             () -> search(
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
@@ -331,6 +332,400 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
         String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
         assertTrue(responseBody, responseBody.contains("Sorting a hybrid query by _score more than once is not supported"));
+    }
+
+    @SneakyThrows
+    public void testScoreSortWithTieBreaker_whenMultipleShardsAndConcurrentSearchEnabled_thenHitsCarrySortValuesInCombinedScoreOrder() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        assertScoreSortWithTieBreaker(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+    }
+
+    @SneakyThrows
+    public void testScoreSortWithTieBreaker_whenMultipleShardsAndConcurrentSearchDisabled_thenHitsCarrySortValuesInCombinedScoreOrder() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        assertScoreSortWithTieBreaker(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+    }
+
+    @SneakyThrows
+    public void testScoreSortWithTieBreaker_whenSingleShardAndConcurrentSearchEnabled_thenHitsCarrySortValuesInCombinedScoreOrder() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        assertScoreSortWithTieBreaker(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    @SneakyThrows
+    public void testScoreSortWithTieBreaker_whenSingleShardAndConcurrentSearchDisabled_thenHitsCarrySortValuesInCombinedScoreOrder() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        assertScoreSortWithTieBreaker(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    /**
+     * [_score desc, _id asc] on a hybrid query: the hits come in the combined-score order of the same query without a sort
+     * (equal scores broken by _id), every hit carries sort values, and sort[0] is the combined score the hit reports.
+     */
+    private void assertScoreSortWithTieBreaker(final String indexName) throws Exception {
+        Map<String, Object> reference = searchHybrid(indexName, "{\"size\":10,\"query\":" + hybridQueryJson(null) + "}");
+        List<Map<String, Object>> referenceHits = getNestedHits(reference);
+        assertEquals(6, referenceHits.size());
+
+        // the sort by _score and a field states its window; the reference without a sort collects a window of size 10 too
+        Map<String, Object> response = searchHybrid(
+            indexName,
+            "{\"size\":10,\"query\":" + hybridQueryJson(10) + ",\"sort\":" + SCORE_DESC_ID_ASC_SORT + "}"
+        );
+        assertEquals(0, ((Map<?, ?>) response.get("_shards")).get("failed"));
+        List<Map<String, Object>> hits = getNestedHits(response);
+        assertEquals(referenceHits.size(), hits.size());
+
+        double previousScore = Double.POSITIVE_INFINITY;
+        String previousId = null;
+        for (int i = 0; i < hits.size(); i++) {
+            Map<String, Object> hit = hits.get(i);
+            double score = ((Number) hit.get("_score")).doubleValue();
+            List<?> sortValues = (List<?>) hit.get("sort");
+            assertNotNull("every hit carries sort values", sortValues);
+            assertEquals(2, sortValues.size());
+            assertEquals("sort[0] is the combined score", score, ((Number) sortValues.get(0)).doubleValue(), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("sort[1] is the tie-breaker", hit.get("_id"), sortValues.get(1));
+            assertEquals(
+                "the ranking is the one of the query without a sort",
+                ((Number) referenceHits.get(i).get("_score")).doubleValue(),
+                score,
+                DELTA_FOR_SCORE_ASSERTION
+            );
+            assertTrue("scores descend", score <= previousScore);
+            if (score == previousScore) {
+                assertTrue("equal scores are broken by ascending _id", ((String) hit.get("_id")).compareTo(previousId) > 0);
+            }
+            previousScore = score;
+            previousId = (String) hit.get("_id");
+        }
+        Object maxScore = ((Map<?, ?>) response.get("hits")).get("max_score");
+        assertEquals(((Number) hits.get(0).get("_score")).doubleValue(), ((Number) maxScore).doubleValue(), DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenMultipleShardsAndConcurrentSearchEnabled_thenPagesWalkTheRankingExactly() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        assertSearchAfterWalksTheRanking(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenMultipleShardsAndConcurrentSearchDisabled_thenPagesWalkTheRankingExactly() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        assertSearchAfterWalksTheRanking(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenSingleShardAndConcurrentSearchEnabled_thenPagesWalkTheRankingExactly() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        assertSearchAfterWalksTheRanking(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenSingleShardAndConcurrentSearchDisabled_thenPagesWalkTheRankingExactly() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        assertSearchAfterWalksTheRanking(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    /**
+     * Pages of two, each requested with the previous page's last sort values as search_after and a constant pagination_depth,
+     * concatenate to exactly the single page of the same request: same documents, same order, same scores, no duplicates, and
+     * the cursor of the last document returns an empty page.
+     */
+    private void assertSearchAfterWalksTheRanking(final String indexName) throws Exception {
+        String query = hybridQueryJson(10);
+        List<Map<String, Object>> expected = getNestedHits(
+            searchHybrid(indexName, "{\"size\":10,\"query\":" + query + ",\"sort\":" + SCORE_DESC_ID_ASC_SORT + "}")
+        );
+        assertEquals(6, expected.size());
+
+        List<Map<String, Object>> walked = new ArrayList<>();
+        List<?> cursor = null;
+        for (int page = 0; page < 4; page++) {
+            String body = "{\"size\":2,\"query\":"
+                + query
+                + ",\"sort\":"
+                + SCORE_DESC_ID_ASC_SORT
+                + (cursor == null ? "" : ",\"search_after\":" + toJsonArray(cursor))
+                + "}";
+            List<Map<String, Object>> hits = getNestedHits(searchHybrid(indexName, body));
+            if (hits.isEmpty()) {
+                break;
+            }
+            walked.addAll(hits);
+            cursor = (List<?>) hits.get(hits.size() - 1).get("sort");
+        }
+        assertEquals(expected.size(), walked.size());
+        for (int i = 0; i < expected.size(); i++) {
+            assertEquals("document at position " + i, expected.get(i).get("_id"), walked.get(i).get("_id"));
+            assertEquals(
+                "score at position " + i,
+                ((Number) expected.get(i).get("_score")).doubleValue(),
+                ((Number) walked.get(i).get("_score")).doubleValue(),
+                DELTA_FOR_SCORE_ASSERTION
+            );
+            assertEquals(expected.get(i).get("sort"), walked.get(i).get("sort"));
+        }
+        // the cursor of the last document: nothing is after it
+        List<?> lastCursor = (List<?>) expected.get(expected.size() - 1).get("sort");
+        List<Map<String, Object>> pastTheEnd = getNestedHits(
+            searchHybrid(
+                indexName,
+                "{\"size\":2,\"query\":"
+                    + query
+                    + ",\"sort\":"
+                    + SCORE_DESC_ID_ASC_SORT
+                    + ",\"search_after\":"
+                    + toJsonArray(lastCursor)
+                    + "}"
+            )
+        );
+        assertTrue(pastTheEnd.isEmpty());
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenPaginationDepthMissing_thenFail() {
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        // a cursor page, and the first page of a walk, which carries no cursor: a cursor is only valid on a page computed over
+        // the window of the page it was taken from, so the window is required on both
+        for (String cursor : new String[] { ",\"search_after\":[0.5,\"3\"]", "" }) {
+            ResponseException exception = expectThrows(
+                ResponseException.class,
+                () -> searchHybrid(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    "{\"size\":2,\"query\":" + hybridQueryJson(null) + ",\"sort\":" + SCORE_DESC_ID_ASC_SORT + cursor + "}"
+                )
+            );
+            assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+            String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
+            assertTrue(
+                responseBody,
+                responseBody.contains(
+                    "pagination_depth param is missing in the search request; it is required when a hybrid query is sorted by _score "
+                        + "and a field"
+                )
+            );
+        }
+    }
+
+    /**
+     * The document with the best combined score is ranked second by every sub-query: doc 3 matches both, docs 1 and 4 match
+     * one each and rank first there. The page, and a search_after walk over it, follow the combined score; the per-sub-query
+     * lists are not runs of that order. All documents are routed to one shard, so that one shard holds both lists, also when
+     * the index has several.
+     */
+    @SneakyThrows
+    public void testScoreSortWithTieBreaker_whenBestCombinedScoreIsSecondInEverySubQuery_thenPagesFollowTheCombinedScore() {
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        for (int numberOfShards : new int[] { SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, SHARDS_COUNT_IN_MULTI_NODE_CLUSTER }) {
+            String indexName = "test-hybrid-score-sort-combined-order-" + numberOfShards;
+            createIndexWithTieBreakerField(indexName, numberOfShards, "integer");
+            indexTieBreakerDocuments(indexName, 0);
+
+            List<Map<String, Object>> hits = getNestedHits(searchHybrid(indexName, tieBreakerSearchBody(10, null)));
+            assertEquals(List.of("3", "1", "4", "5", "6"), hits.stream().map(hit -> hit.get("_id")).toList());
+            assertCombinedScoreOrder(hits);
+
+            List<Map<String, Object>> walked = walkWithSearchAfter(indexName, 1);
+            assertEquals(List.of("3", "1", "4", "5", "6"), walked.stream().map(hit -> hit.get("_id")).toList());
+        }
+    }
+
+    /**
+     * Two indices behind one search map the tie-breaker as integer and long, and hold the same documents, so every document
+     * has a twin with the same combined score in the other index. The cursor is typed per shard and core widens the field
+     * when it merges the shards' pages: the walk is the single page, with no error.
+     */
+    @SneakyThrows
+    public void testSearchAfterWithScoreSort_whenIndicesMapTieBreakerAsIntegerAndLong_thenPagesWalkTheRankingExactly() {
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        createIndexWithTieBreakerField(TIE_BREAKER_INDEX_INTEGER, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, "integer");
+        createIndexWithTieBreakerField(TIE_BREAKER_INDEX_LONG, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, "long");
+        indexTieBreakerDocuments(TIE_BREAKER_INDEX_INTEGER, 0);
+        indexTieBreakerDocuments(TIE_BREAKER_INDEX_LONG, 100);
+        String indices = TIE_BREAKER_INDEX_INTEGER + "," + TIE_BREAKER_INDEX_LONG;
+
+        List<Map<String, Object>> expected = getNestedHits(searchHybrid(indices, tieBreakerSearchBody(10, null)));
+        // twins tie on the combined score and are broken by seq: the integer index's document (seq n) before the long one's
+        assertEquals(
+            List.of(3, 103, 1, 4, 101, 104, 5, 6, 105, 106),
+            expected.stream().map(hit -> ((Number) ((List<?>) hit.get("sort")).get(1)).intValue()).toList()
+        );
+        assertCombinedScoreOrder(expected);
+
+        List<Map<String, Object>> walked = walkWithSearchAfter(indices, 3);
+        assertEquals(expected.size(), walked.size());
+        for (int i = 0; i < expected.size(); i++) {
+            assertEquals(
+                "document at position " + i,
+                expected.get(i).get("_index") + "/" + expected.get(i).get("_id"),
+                walked.get(i).get("_index") + "/" + walked.get(i).get("_id")
+            );
+            assertEquals("sort values at position " + i, expected.get(i).get("sort"), walked.get(i).get("sort"));
+        }
+    }
+
+    /**
+     * A field sort over two indices that map the field as integer and long: core can only widen the field when it merges the
+     * shards' pages if every page keeps the sort fields its shard collected with.
+     */
+    @SneakyThrows
+    public void testFieldSort_whenIndicesMapFieldAsIntegerAndLong_thenShardPagesAreMerged() {
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        createIndexWithTieBreakerField(TIE_BREAKER_INDEX_INTEGER, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, "integer");
+        createIndexWithTieBreakerField(TIE_BREAKER_INDEX_LONG, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, "long");
+        indexTieBreakerDocuments(TIE_BREAKER_INDEX_INTEGER, 0);
+        indexTieBreakerDocuments(TIE_BREAKER_INDEX_LONG, 100);
+
+        List<Map<String, Object>> hits = getNestedHits(
+            searchHybrid(
+                TIE_BREAKER_INDEX_INTEGER + "," + TIE_BREAKER_INDEX_LONG,
+                "{\"size\":10,\"query\":" + TIE_BREAKER_HYBRID_QUERY + ",\"sort\":[{\"seq\":{\"order\":\"desc\"}}]}"
+            )
+        );
+        assertEquals(
+            List.of(106, 105, 104, 103, 101, 6, 5, 4, 3, 1),
+            hits.stream().map(hit -> ((Number) ((List<?>) hit.get("sort")).get(0)).intValue()).toList()
+        );
+    }
+
+    private static final String TIE_BREAKER_INDEX_INTEGER = "test-hybrid-score-sort-tie-breaker-integer";
+    private static final String TIE_BREAKER_INDEX_LONG = "test-hybrid-score-sort-tie-breaker-long";
+    private static final String TIE_BREAKER_HYBRID_QUERY =
+        "{\"hybrid\":{\"pagination_depth\":10,\"queries\":[{\"match\":{\"title\":\"alpha\"}},{\"match\":{\"title\":\"beta\"}}]}}";
+    private static final String SCORE_DESC_SEQ_ASC_SORT = "[{\"_score\":{\"order\":\"desc\"}},{\"seq\":{\"order\":\"asc\"}}]";
+
+    @SneakyThrows
+    private void createIndexWithTieBreakerField(final String indexName, final int numberOfShards, final String seqType) {
+        Request request = new Request("PUT", "/" + indexName);
+        request.setJsonEntity(
+            String.format(
+                Locale.ROOT,
+                "{\"settings\":{\"number_of_shards\":%d,\"number_of_replicas\":0},"
+                    + "\"mappings\":{\"properties\":{\"title\":{\"type\":\"text\"},\"seq\":{\"type\":\"%s\"}}}}",
+                numberOfShards,
+                seqType
+            )
+        );
+        assertEquals(RestStatus.OK, RestStatus.fromCode(client().performRequest(request).getStatusLine().getStatusCode()));
+    }
+
+    /**
+     * Five documents, all routed to one shard. BM25 over "title" ranks a shorter document higher, so after min_max each
+     * sub-query has its best document at 1.0, doc 3 in the middle and its weakest document at the floor:
+     * alpha: doc 1 (1.0), doc 3, doc 5; beta: doc 4 (1.0), doc 3, doc 6. Doc 3's two normalized scores average above 0.5,
+     * which is where docs 1 and 4 land, so the combined order is 3, then 1 and 4 by seq, then 5 and 6 by seq.
+     */
+    @SneakyThrows
+    private void indexTieBreakerDocuments(final String indexName, final int seqOffset) {
+        String[][] documents = new String[][] {
+            { "1", "alpha" },
+            { "3", "alpha beta w" },
+            { "4", "beta" },
+            { "5", "alpha w w w w w w w w" },
+            { "6", "beta w w w w w w w w" } };
+        StringBuilder bulk = new StringBuilder();
+        for (String[] document : documents) {
+            bulk.append(
+                String.format(Locale.ROOT, "{\"index\":{\"_index\":\"%s\",\"_id\":\"%s\",\"routing\":\"r\"}}%n", indexName, document[0])
+            );
+            bulk.append(
+                String.format(Locale.ROOT, "{\"title\":\"%s\",\"seq\":%d}%n", document[1], Integer.parseInt(document[0]) + seqOffset)
+            );
+        }
+        Request request = new Request("POST", "/_bulk");
+        request.addParameter("refresh", "true");
+        request.setJsonEntity(bulk.toString());
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        assertFalse(EntityUtils.toString(response.getEntity()).contains("\"errors\":true"));
+    }
+
+    private String tieBreakerSearchBody(final int size, final List<?> searchAfter) {
+        return "{\"size\":"
+            + size
+            + ",\"query\":"
+            + TIE_BREAKER_HYBRID_QUERY
+            + ",\"sort\":"
+            + SCORE_DESC_SEQ_ASC_SORT
+            + (searchAfter == null ? "" : ",\"search_after\":" + toJsonArray(searchAfter))
+            + "}";
+    }
+
+    /** Pages of {@code size}, each requested with the previous page's last sort values, until a page comes back empty. */
+    private List<Map<String, Object>> walkWithSearchAfter(final String indices, final int size) {
+        List<Map<String, Object>> walked = new ArrayList<>();
+        List<?> cursor = null;
+        for (int page = 0; page < 20; page++) {
+            List<Map<String, Object>> hits = getNestedHits(searchHybrid(indices, tieBreakerSearchBody(size, cursor)));
+            if (hits.isEmpty()) {
+                return walked;
+            }
+            walked.addAll(hits);
+            cursor = (List<?>) hits.get(hits.size() - 1).get("sort");
+        }
+        fail("the walk did not end");
+        return walked;
+    }
+
+    /** Scores never increase, sort[0] is the hit's combined score, and equal scores are broken by ascending seq (sort[1]). */
+    private void assertCombinedScoreOrder(final List<Map<String, Object>> hits) {
+        double previousScore = Double.POSITIVE_INFINITY;
+        long previousSeq = Long.MIN_VALUE;
+        for (Map<String, Object> hit : hits) {
+            double score = ((Number) hit.get("_score")).doubleValue();
+            List<?> sortValues = (List<?>) hit.get("sort");
+            assertEquals(score, ((Number) sortValues.get(0)).doubleValue(), DELTA_FOR_SCORE_ASSERTION);
+            long seq = ((Number) sortValues.get(1)).longValue();
+            assertTrue("scores descend", score <= previousScore);
+            if (score == previousScore) {
+                assertTrue("equal scores are broken by ascending seq", seq > previousSeq);
+            }
+            previousScore = score;
+            previousSeq = seq;
+        }
+    }
+
+    private static final String SCORE_DESC_ID_ASC_SORT = "[{\"_score\":{\"order\":\"desc\"}},{\"_id\":{\"order\":\"asc\"}}]";
+
+    private String hybridQueryJson(final Integer paginationDepth) {
+        return String.format(
+            Locale.ROOT,
+            "{\"hybrid\":{%s\"queries\":[{\"match\":{\"%s\":\"mission\"}},{\"term\":{\"%s\":\"part\"}},"
+                + "{\"range\":{\"%s\":{\"gte\":%d,\"lte\":%d}}}]}}",
+            paginationDepth == null ? "" : "\"pagination_depth\":" + paginationDepth + ",",
+            TEXT_FIELD_1_NAME,
+            TEXT_FIELD_1_NAME,
+            INTEGER_FIELD_1_STOCK,
+            GTE_OF_RANGE_IN_HYBRID_QUERY,
+            LTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+    }
+
+    private static String toJsonArray(final List<?> values) {
+        return values.stream()
+            .map(value -> value instanceof String ? "\"" + value + "\"" : String.valueOf(value))
+            .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+    }
+
+    @SneakyThrows
+    private Map<String, Object> searchHybrid(final String indexName, final String body) {
+        Request request = new Request("POST", "/" + indexName + "/_search");
+        request.addParameter("search_pipeline", SEARCH_PIPELINE);
+        // a failed shard has to fail the request instead of being reported as a partial result
+        request.addParameter("allow_partial_search_results", Boolean.FALSE.toString());
+        request.setJsonEntity(body);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
     }
 
     @SneakyThrows
