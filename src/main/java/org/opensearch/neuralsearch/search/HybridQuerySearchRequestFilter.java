@@ -25,6 +25,7 @@ import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
+import org.opensearch.neuralsearch.query.DefaultFusion;
 import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.ObservedSourceSizes;
@@ -58,6 +59,10 @@ import lombok.extern.log4j.Log4j2;
  * to perform score normalization and combination.
  *
  * This filter works transparently without any pipeline or query configuration.
+ *
+ * Ahead of all of that, a classic hybrid that no search pipeline would combine — neither a normalization nor a score-ranker
+ * processor applies to the request — is switched to fused mode with the default techniques, as if it carried
+ * {@code fusion: {}}, instead of answering with each shard's uncombined sub-query results (see {@link DefaultFusion}).
  *
  * The same seam carries fused mode's coordinator-side reporting — per-leg profiling, {@code explain}, and a leg cut short
  * by a soft {@code timeout}: a fused hybrid runs its legs as sub-searches during the coordinator rewrite, and this is the
@@ -97,7 +102,14 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
     ) {
         // only intercept search actions
         if (SearchAction.NAME.equals(action) && request instanceof SearchRequest) {
-            SearchRequest searchRequest = (SearchRequest) request;
+            // A classic hybrid that no search pipeline would combine runs in fused mode with the default techniques, on a copy
+            // of the request: the caller's request stays as written. First, because it decides which of the paths below the
+            // request takes: a request that now carries fusion needs neither classic workaround, and attachFusedReporting
+            // attaches to the copy's query.
+            SearchRequest searchRequest = DefaultFusion.applyTo((SearchRequest) request);
+            if (searchRequest != request) {
+                request = (Request) searchRequest;
+            }
 
             // These workarounds apply to CLASSIC hybrid only. Resolver (fused) mode self-erases at the coordinator into
             // a standard bool query and never produces the sentinel CompoundTopDocs format, so it is DFS-compatible and

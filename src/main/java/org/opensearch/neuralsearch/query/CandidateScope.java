@@ -167,7 +167,8 @@ final class CandidateScope {
             SEARCH_REQUEST,
             "localClusterAlias",
             Disposition.NOT_PROPAGATED,
-            "set only by core's own cross-cluster sub-request constructor; not reachable from a user request"
+            "set only on core's cross-cluster sub-request, which fused mode never sends (it refuses cross-cluster search at "
+                + "the origin) and on which a classic hybrid stays classic (DefaultFusion)"
         );
         put(table, SEARCH_REQUEST, "absoluteStartMillis", Disposition.NOT_PROPAGATED, "as localClusterAlias");
         put(table, SEARCH_REQUEST, "finalReduce", Disposition.NOT_PROPAGATED, "as localClusterAlias");
@@ -450,6 +451,20 @@ final class CandidateScope {
     }
 
     /**
+     * Whether the request names an index of another cluster, as {@code cluster:index} or through a wildcard alias such as
+     * {@code *:index}. Fused mode refuses cross-cluster search ({@link #rejectUnsupported}), so a classic hybrid that names
+     * one stays classic rather than running with the default fusion ({@link DefaultFusion}).
+     */
+    static boolean targetsRemoteCluster(final SearchRequest request) {
+        for (String index : request.indices()) {
+            if (index.indexOf(':') >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Fail the {@link Disposition#REJECTED} shapes. Each check tests for a value the user actually supplied, so a plain
      * request never trips one, and the messages name the field the user wrote rather than the field this class keys on.
      */
@@ -457,16 +472,14 @@ final class CandidateScope {
         // Cross-cluster first, since this runs before index resolution: a literal `cluster:index` would otherwise fail
         // as `no such index`, which says nothing about fused mode, while a wildcard alias (`*:index`) resolves cleanly
         // and would reach round 2 — so neither case can be left to resolution.
-        for (String index : request.indices()) {
-            if (index.indexOf(':') >= 0) {
-                throw unsupported(
-                    "cross-cluster search",
-                    "the fused window keys and addresses documents by [_index] plus [_id], and neither survives a cluster "
-                        + "hop: a remote hit carries the bare index name with its alias held separately, so same-named "
-                        + "indices in two clusters collapse into one key, and round 2's [_index] term never matches on a "
-                        + "remote shard. Remote documents would reach the user through the Tail alone, at [_score: 0.0]"
-                );
-            }
+        if (targetsRemoteCluster(request)) {
+            throw unsupported(
+                "cross-cluster search",
+                "the fused window keys and addresses documents by [_index] plus [_id], and neither survives a cluster "
+                    + "hop: a remote hit carries the bare index name with its alias held separately, so same-named "
+                    + "indices in two clusters collapse into one key, and round 2's [_index] term never matches on a "
+                    + "remote shard. Remote documents would reach the user through the Tail alone, at [_score: 0.0]"
+            );
         }
         if (Objects.nonNull(request.scroll())) {
             throw unsupported("scroll", reasonFor(SEARCH_REQUEST, "scroll"));
