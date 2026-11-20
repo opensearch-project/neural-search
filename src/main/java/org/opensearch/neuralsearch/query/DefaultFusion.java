@@ -4,13 +4,9 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Method;
 import java.util.Objects;
 
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.SuppressForbidden;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -48,9 +44,6 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DefaultFusion {
-
-    /** {@code SearchRequest#getLocalClusterAlias}, package-private in core; null when it cannot be read. */
-    private static final MethodHandle LOCAL_CLUSTER_ALIAS = searchRequestGetter("getLocalClusterAlias");
 
     /**
      * The request to run. When the request's top-level query is a classic hybrid that no search pipeline would combine, a copy
@@ -126,42 +119,15 @@ public final class DefaultFusion {
 
     /**
      * Whether the request is core's copy for one remote cluster of a cross-cluster search that minimizes round trips
-     * ({@code SearchRequest#subSearchRequest}): it names that cluster's indices locally and carries no search pipeline, so
-     * nothing else tells it apart from a request a user sent to this cluster. Core marks it with {@code localClusterAlias},
-     * behind a package-private getter, read here reflectively as the security plugin reads it. Fails closed: a getter that
-     * cannot be read counts as a sub-request, which keeps every hybrid query on this node classic.
+     * ({@code SearchRequest#subSearchRequest}): it names that cluster's indices locally and carries no named search
+     * pipeline, so nothing else tells it apart from a request a user sent to this cluster. Core marks it with
+     * {@code localClusterAlias}, whose accessor is public as of
+     * <a href="https://github.com/opensearch-project/OpenSearch/pull/23658">opensearch-project/OpenSearch#23658</a>.
+     *
+     * <p>Tested for null rather than for emptiness, which core's own javadoc asks for: the sub-request for the local half
+     * of a multi-cluster search carries an empty alias instead of a null one, and it is a sub-request like any other.
      */
     static boolean isCrossClusterSubRequest(final SearchRequest request) {
-        return isCrossClusterSubRequest(request, LOCAL_CLUSTER_ALIAS);
-    }
-
-    /** As {@link #isCrossClusterSubRequest(SearchRequest)}, reading core's mark through {@code localClusterAlias}. */
-    static boolean isCrossClusterSubRequest(final SearchRequest request, final MethodHandle localClusterAlias) {
-        if (Objects.isNull(localClusterAlias)) {
-            return true;
-        }
-        try {
-            return Objects.nonNull((String) localClusterAlias.invokeExact(request));
-        } catch (Throwable t) {
-            return true;
-        }
-    }
-
-    /** A handle on the no-argument {@code SearchRequest} method of that name, or null when it cannot be read. */
-    @SuppressForbidden(reason = "SearchRequest#getLocalClusterAlias is package-private and is the only mark of a cross-cluster sub-request")
-    static MethodHandle searchRequestGetter(final String name) {
-        try {
-            Method getter = SearchRequest.class.getDeclaredMethod(name);
-            getter.setAccessible(true);
-            return MethodHandles.lookup().unreflect(getter);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            log.warn(
-                "cannot read SearchRequest#{}, so a [{}] query without [fusion] stays in classic mode on this node",
-                name,
-                HybridQueryBuilder.NAME,
-                e
-            );
-            return null;
-        }
+        return Objects.nonNull(request.getLocalClusterAlias());
     }
 }

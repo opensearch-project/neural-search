@@ -10,8 +10,6 @@ import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -45,6 +43,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.transport.RemoteClusterAware;
 import org.opensearch.search.pipeline.PipelineConfiguration;
 import org.opensearch.search.pipeline.SearchPipelineMetadata;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
@@ -295,20 +294,16 @@ public class DefaultFusionTests extends OpenSearchTestCase {
         assertNull(((HybridQueryBuilder) shared.query()).fusion());
     }
 
-    /** Core's mark is read; a getter that is missing, or that throws, counts as a sub-request, which keeps the hybrid classic. */
+    /**
+     * Core's mark tells a forwarded sub-request from a request a user sent here. The local half of a multi-cluster search
+     * carries an empty alias rather than a null one, and counts as a sub-request too — so the predicate has to test for
+     * null, not for emptiness.
+     */
     @SneakyThrows
-    public void testIsCrossClusterSubRequest_thenReadsCoresMarkAndFailsClosed() {
+    public void testIsCrossClusterSubRequest_thenReadsCoresMark() {
         assertFalse(DefaultFusion.isCrossClusterSubRequest(new SearchRequest(INDEX)));
         assertTrue(DefaultFusion.isCrossClusterSubRequest(crossClusterSubRequest(new SearchRequest(INDEX))));
-
-        assertNull(DefaultFusion.searchRequestGetter("noSuchGetter"));
-        assertTrue(DefaultFusion.isCrossClusterSubRequest(new SearchRequest(INDEX), null));
-        MethodHandle throwing = MethodHandles.dropArguments(
-            MethodHandles.throwException(String.class, IllegalStateException.class).bindTo(new IllegalStateException("unreadable")),
-            0,
-            SearchRequest.class
-        );
-        assertTrue(DefaultFusion.isCrossClusterSubRequest(new SearchRequest(INDEX), throwing));
+        assertTrue(DefaultFusion.isCrossClusterSubRequest(localHalfOfCrossClusterSearch(new SearchRequest(INDEX))));
     }
 
     // ---- helpers ----
@@ -399,9 +394,22 @@ public class DefaultFusionTests extends OpenSearchTestCase {
     }
 
     /** Core's copy of a request for one remote cluster, built the way core's cross-cluster search builds it. */
+    private static SearchRequest crossClusterSubRequest(final SearchRequest original) {
+        return subRequestWithAlias(original, "remote");
+    }
+
+    /**
+     * Core's copy for the local half of a multi-cluster search, which carries
+     * {@code RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY} — the empty string — rather than a null alias.
+     */
+    private static SearchRequest localHalfOfCrossClusterSearch(final SearchRequest original) {
+        return subRequestWithAlias(original, RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY);
+    }
+
+    /** {@code SearchRequest#subSearchRequest} stays package-private in core, so building one still needs reflection. */
     @SneakyThrows
     @SuppressForbidden(reason = "SearchRequest#subSearchRequest is package-private; it is the only way core builds a sub-request")
-    private static SearchRequest crossClusterSubRequest(final SearchRequest original) {
+    private static SearchRequest subRequestWithAlias(final SearchRequest original, final String clusterAlias) {
         Method subSearchRequest = SearchRequest.class.getDeclaredMethod(
             "subSearchRequest",
             SearchRequest.class,
@@ -411,7 +419,7 @@ public class DefaultFusionTests extends OpenSearchTestCase {
             boolean.class
         );
         subSearchRequest.setAccessible(true);
-        return (SearchRequest) subSearchRequest.invoke(null, original, original.indices(), "remote", 0L, false);
+        return (SearchRequest) subSearchRequest.invoke(null, original, original.indices(), clusterAlias, 0L, false);
     }
 
     /** Index name to its {@code index.search.default_pipeline}, in order; a null value declares none. */
