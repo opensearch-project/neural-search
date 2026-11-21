@@ -115,7 +115,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                         numberOfSubQueries,
                         normalizedScore
                     );
-                    scoreDoc.score = normalizedScore;
                 }
             }
         }

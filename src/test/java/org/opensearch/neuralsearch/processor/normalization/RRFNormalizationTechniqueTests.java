@@ -387,12 +387,12 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertEquals(rank1Score, doc2Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery (rank 1)
         assertEquals(zeroScore, doc2Scores.get(2).getKey(), DELTA_FOR_ASSERTION);  // Third subquery (not present)
 
-        // Verify that original ScoreDoc scores were updated with RRF scores
-        assertEquals(rank1Score, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in first subquery
-        assertEquals(rank2Score, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
-        assertEquals(rank1Score, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc2 in second subquery
-        assertEquals(rank2Score, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc1 in second subquery
-        assertEquals(rank1Score, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in third subquery
+        // explain() must not change the scores it explains
+        assertEquals(0.8f, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(0.6f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(0.9f, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(0.7f, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(0.5f, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION);
 
         // Verify explanation descriptions
         assertTrue(doc1Scores.get(0).getValue().contains("rrf"));

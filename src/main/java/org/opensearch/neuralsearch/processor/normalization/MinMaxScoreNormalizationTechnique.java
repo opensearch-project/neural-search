@@ -207,7 +207,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                         numberOfSubQueries,
                         normalizedScore
                     );
-                    scoreDoc.score = normalizedScore;
                 }
             }
         }

@@ -317,12 +317,12 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         assertEquals(0.6247f, doc2Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
         assertEquals(0.0000f, doc2Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery (doc2 not present)
 
-        // Verify that original ScoreDoc scores were updated with L2 normalized values
-        assertEquals(0.5547f, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in first subquery
-        assertEquals(0.8321f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
-        assertEquals(0.6247f, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc2 in second subquery
-        assertEquals(0.7809f, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc1 in second subquery
-        assertEquals(1.0000f, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in third subquery
+        // explain() must not change the scores it explains
+        assertEquals(2.0f, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(3.0f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(4.0f, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(5.0f, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(1.0f, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION);
 
         // Verify explanation descriptions
         assertTrue(doc1Scores.get(0).getValue().contains("l2 normalization"));

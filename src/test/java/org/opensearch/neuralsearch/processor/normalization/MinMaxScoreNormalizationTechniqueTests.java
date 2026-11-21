@@ -277,12 +277,12 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         // Third subquery (document 2 not present in third subquery)
         assertEquals(0.0f, doc2Scores.get(2).getKey(), DELTA_FOR_SCORE_ASSERTION);
 
-        // Verify that original ScoreDoc scores were updated
-        assertEquals(1.0f, topDocs1.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in first subquery
-        assertEquals(0.0f, topDocs1.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION); // doc2 in first subquery
-        assertEquals(1.0f, topDocs2.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc2 in second subquery
-        assertEquals(0.0f, topDocs2.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in second subquery
-        assertEquals(1.0f, topDocs3.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in third subquery
+        // explain() must not change the scores it explains
+        assertEquals(0.8f, topDocs1.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.6f, topDocs1.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.9f, topDocs2.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.7f, topDocs2.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.5f, topDocs3.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
 
         // Verify explanation descriptions
         assertTrue(doc1Scores.get(0).getValue().contains("min_max normalization"));

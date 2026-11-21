@@ -104,7 +104,6 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                         numberOfSubQueries,
                         normalizedScore
                     );
-                    scoreDoc.score = normalizedScore;
                 }
             }
         }

@@ -22,7 +22,6 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
-import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
@@ -79,7 +78,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         for (int referenceShardId = 0; referenceShardId < queryTopDocs.size(); referenceShardId++) {
             processTopDocs(
                 queryTopDocs.get(referenceShardId),
-                (docId, score, subQueryIndex) -> {},
+                (scoreDoc, score, subQueryIndex) -> scoreDoc.score = score,
                 sortedDocIdsPerSubqueryByGlobalRank,
                 referenceShardId
             );
@@ -152,9 +151,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             int numberOfSubQueries = topDocsPerSubQuery.size();
             processTopDocs(
                 compoundQueryTopDocs,
-                (docId, score, subQueryIndex) -> ScoreNormalizationUtil.setNormalizedScore(
+                (scoreDoc, score, subQueryIndex) -> ScoreNormalizationUtil.setNormalizedScore(
                     normalizedScores,
-                    docId,
+                    new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard()),
                     subQueryIndex,
                     numberOfSubQueries,
                     score
@@ -169,7 +168,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
 
     private void processTopDocs(
         CompoundTopDocs compoundQueryTopDocs,
-        TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
+        TriConsumer<ScoreDoc, Float, Integer> scoreProcessor,
         Map<Integer, Map<String, Integer>> sortedDocIdMapPerSubqueryByGlobalRank,
         int referenceShardId
     ) {
@@ -178,21 +177,19 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         }
 
         List<TopDocs> topDocsList = compoundQueryTopDocs.getTopDocs();
-        SearchShard searchShard = compoundQueryTopDocs.getSearchShard();
 
         for (int topDocsIndex = 0; topDocsIndex < topDocsList.size(); topDocsIndex++) {
             Map<String, Integer> docIdToRankMap = sortedDocIdMapPerSubqueryByGlobalRank.isEmpty()
                 ? Map.of()
                 : sortedDocIdMapPerSubqueryByGlobalRank.get(topDocsIndex);
-            processTopDocsEntry(topDocsList.get(topDocsIndex), searchShard, topDocsIndex, scoreProcessor, docIdToRankMap, referenceShardId);
+            processTopDocsEntry(topDocsList.get(topDocsIndex), topDocsIndex, scoreProcessor, docIdToRankMap, referenceShardId);
         }
     }
 
     private void processTopDocsEntry(
         @NonNull TopDocs topDocs,
-        SearchShard searchShard,
         int topDocsIndex,
-        TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
+        TriConsumer<ScoreDoc, Float, Integer> scoreProcessor,
         Map<String, Integer> docIdToRankMap,
         int referenceShardId
     ) {
@@ -205,9 +202,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
                 );
             }
             float normalizedScore = RRFScoreNormalizer.scoreForRank(rank, rankConstant);
-            DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, searchShard);
-            scoreProcessor.apply(docIdAtSearchShard, normalizedScore, topDocsIndex);
-            scoreDoc.score = normalizedScore;
+            scoreProcessor.apply(scoreDoc, normalizedScore, topDocsIndex);
         }
     }
 
