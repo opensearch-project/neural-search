@@ -22,6 +22,23 @@ public class HitsThresholdCheckerTests extends OpenSearchQueryTestCase {
         assertTrue(hitsThresholdChecker.isThresholdReached());
     }
 
+    public void testThresholdReached_whenHitCountEqualsThreshold_thenNotReached() {
+        HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(5);
+        IntStream.rangeClosed(1, 5).forEach((checker) -> hitsThresholdChecker.incrementHitCount());
+        // a count that lands exactly on the threshold is still exact
+        assertFalse(hitsThresholdChecker.isThresholdReached());
+        hitsThresholdChecker.incrementHitCount();
+        // only a count above the threshold means more hits may exist than were counted
+        assertTrue(hitsThresholdChecker.isThresholdReached());
+    }
+
+    public void testThresholdReached_whenThresholdZero_thenReachedAfterFirstHit() {
+        HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(0);
+        assertFalse(hitsThresholdChecker.isThresholdReached());
+        hitsThresholdChecker.incrementHitCount();
+        assertTrue(hitsThresholdChecker.isThresholdReached());
+    }
+
     public void testThresholdLimit_whenThresholdNegative_thenFail() {
         expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(-1));
     }
