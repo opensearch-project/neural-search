@@ -1676,15 +1676,20 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         hybridScorer.getSubQueryScores()[0] = 0.9f;
         leafCollector.collect(0);
 
+        // The hit count lands exactly on the threshold: the count is still exact, so collection continues
         hybridScorer.resetScores();
         hybridScorer.getSubQueryScores()[0] = 0.8f;
-        expectThrows(CollectionTerminatedException.class, () -> leafCollector.collect(1));
+        leafCollector.collect(1);
 
-        // The doc that tripped the threshold is counted in the total but not collected into groups
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.7f;
+        expectThrows(CollectionTerminatedException.class, () -> leafCollector.collect(2));
+
+        // The doc that exceeded the threshold is counted in the total but not collected into groups
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
         assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, topDocs.get(0).totalHits.relation());
-        assertEquals(List.of("groupA"), collapseValueStrings(topDocs.get(0)));
-        assertEquals(2, collector.getTotalHits());
+        assertEquals(List.of("groupA", "groupB"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(3, collector.getTotalHits());
 
         reader.close();
         writer.close();

@@ -30,8 +30,14 @@ public class HitsThresholdChecker {
         ++hitCount;
     }
 
+    /**
+     * Returns true once the hit count has exceeded the threshold, matching Lucene's
+     * TopScoreDocCollector and TopFieldCollector. A count that lands exactly on the threshold is
+     * still exact, so collectors keep counting and report the relation as GREATER_THAN_OR_EQUAL_TO
+     * only when at least threshold + 1 hits match.
+     */
     public boolean isThresholdReached() {
-        return hitCount >= getTotalHitsThreshold();
+        return hitCount > getTotalHitsThreshold();
     }
 
     public ScoreMode scoreMode() {

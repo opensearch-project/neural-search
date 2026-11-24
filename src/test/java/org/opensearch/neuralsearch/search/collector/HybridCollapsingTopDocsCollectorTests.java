@@ -15,6 +15,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.BulkScorer;
+import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.IndexSearcher;
@@ -23,6 +24,7 @@ import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.Directory;
@@ -102,6 +104,102 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenHitCountEqualsThreshold_thenTotalHitsExact() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        // Threshold equals the number of matching docs: the count is exact, so collection must not terminate
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(3)
+        );
+        collector.setWeight(mock(Weight.class));
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[] scores = { 0.9f, 0.8f, 0.7f };
+        for (int doc = 0; doc < scores.length; doc++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[doc];
+            leafCollector.collect(doc);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocs.get(0).totalHits.relation());
+        assertEquals(3, topDocs.get(0).scoreDocs.length);
+        assertEquals(3, collector.getTotalHits());
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenHitCountExceedsThreshold_thenCollectionTerminatesWithLowerBoundRelation() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(2)
+        );
+        collector.setWeight(mock(Weight.class));
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // The count lands exactly on the threshold after the second doc, which is still exact
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.9f;
+        leafCollector.collect(0);
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.8f;
+        leafCollector.collect(1);
+
+        // The third doc exceeds the threshold, matching Lucene's TopScoreDocCollector
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.7f;
+        expectThrows(CollectionTerminatedException.class, () -> leafCollector.collect(2));
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, topDocs.get(0).totalHits.relation());
+        assertEquals(3, collector.getTotalHits());
 
         reader.close();
         writer.close();

@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Allow `sort: [_score, <field>]` without `collapse` and page it with `search_after`, also fixes per-sub-query windows for field sorts, #2042 ([#2082](https://github.com/opensearch-project/neural-search/pull/2082))
 
 ### Bug Fixes
+* [Hybrid Query] Report `hits.total.relation` as `gte` instead of `eq` when a shard's hit count lands exactly on `track_total_hits`, matching Lucene: the threshold now counts as reached only once the hit count exceeds it ([#2096](https://github.com/opensearch-project/neural-search/issues/2096))
 * [Hybrid Query] Point the `sort: [_score, <field>]` without `collapse` version gate at the release that ships it, so a rolling upgrade no longer accepts the shape while a node that cannot order such a page is still in the cluster ([#2103](https://github.com/opensearch-project/neural-search/pull/2103))
 * [Hybrid Query] Fix concurrent segment search changing hybrid query results: each shard now keeps at most `pagination_depth` (or `size`) hits per sub-query. Score-ordered, field-sorted and default-mode `collapse` results no longer depend on the segment layout, `rescore` runs once per shard, single-shard requests fetch only the kept hits, and pages beyond `pagination_depth` return "Reached end of result"; distinct-groups collapse not affected ([#2093](https://github.com/opensearch-project/neural-search/pull/2093))
 * [Hybrid Query] Fix concurrent sorted hybrid queries returning wrong documents or failing with runtime exception ([#2089](https://github.com/opensearch-project/neural-search/pull/2089))
@@ -28,4 +29,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Maintenance
 
 ### Refactoring
-
