@@ -16,6 +16,7 @@ import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPON
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -39,6 +40,8 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
+import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -1217,6 +1220,109 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
                 .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
                 .searchPhaseContext(searchPhaseContext)
+                .build()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testExplain_whenExplainIsEnabled_thenScoresAndOrderMatchRequestWithoutExplain() {
+        for (ScoreNormalizationTechnique technique : allNormalizationTechniques()) {
+            List<QuerySearchResult> withoutExplain = twoSubQueryShardResults();
+            executeWithExplain(withoutExplain, technique, false, null);
+            List<QuerySearchResult> withExplain = twoSubQueryShardResults();
+            PipelineProcessingContext pipelineProcessingContext = new PipelineProcessingContext();
+            executeWithExplain(withExplain, technique, true, pipelineProcessingContext);
+
+            ScoreDoc[] expected = withoutExplain.get(0).topDocs().topDocs.scoreDocs;
+            ScoreDoc[] actual = withExplain.get(0).topDocs().topDocs.scoreDocs;
+            String name = technique.techniqueName();
+            assertEquals(name, expected.length, actual.length);
+            for (int i = 0; i < expected.length; i++) {
+                assertEquals(name + " doc at position " + i, expected[i].doc, actual[i].doc);
+                assertEquals(name + " score at position " + i, expected[i].score, actual[i].score, 0.0f);
+            }
+
+            // the top node of every explanation is the score the response ships
+            ExplanationPayload explanationPayload = (ExplanationPayload) pipelineProcessingContext.getAttribute(EXPLANATION_RESPONSE_KEY);
+            Map<SearchShard, List<CombinedExplanationDetails>> explanationsPerShard = (Map<
+                SearchShard,
+                List<CombinedExplanationDetails>>) explanationPayload.getExplainPayload()
+                    .get(ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR);
+            Map<Integer, Float> explainedScores = new HashMap<>();
+            for (CombinedExplanationDetails details : explanationsPerShard.values().iterator().next()) {
+                explainedScores.put(
+                    details.getCombinationExplanations().getDocId(),
+                    details.getCombinationExplanations().getScoreDetails().get(0).getKey()
+                );
+            }
+            for (ScoreDoc scoreDoc : actual) {
+                assertEquals(name + " explained score of doc " + scoreDoc.doc, scoreDoc.score, explainedScores.get(scoreDoc.doc), 0.0f);
+            }
+        }
+    }
+
+    private static List<ScoreNormalizationTechnique> allNormalizationTechniques() {
+        ScoreNormalizationFactory factory = new ScoreNormalizationFactory();
+        return List.of("min_max", "z_score", "l2", "rrf").stream().map(factory::createNormalization).toList();
+    }
+
+    // one shard, two sub-queries; docs 1, 3 and 5 match both
+    private static List<QuerySearchResult> twoSubQueryShardResults() {
+        SearchShardTarget searchShardTarget = new SearchShardTarget("node", new ShardId("index", "uuid", 0), null, OriginalIndices.NONE);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        querySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(7, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(0),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(0, 0.9f),
+                        new ScoreDoc(1, 0.7f),
+                        new ScoreDoc(2, 0.5f),
+                        new ScoreDoc(3, 0.4f),
+                        new ScoreDoc(4, 0.3f),
+                        new ScoreDoc(5, 0.1f),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(1, 0.8f),
+                        new ScoreDoc(3, 0.6f),
+                        new ScoreDoc(5, 0.2f),
+                        new ScoreDoc(6, 0.15f),
+                        createStartStopElementForHybridSearchResults(0) }
+                ),
+                0.9f
+            ),
+            null
+        );
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(0);
+        return List.of(querySearchResult);
+    }
+
+    private static void executeWithExplain(
+        final List<QuerySearchResult> querySearchResults,
+        final ScoreNormalizationTechnique normalizationTechnique,
+        final boolean explain,
+        final PipelineProcessingContext pipelineProcessingContext
+    ) {
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.from(0);
+        searchSourceBuilder.explain(explain);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+        when(searchPhaseContext.getNumShards()).thenReturn(1);
+
+        new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()).execute(
+            NormalizationProcessorWorkflowExecuteRequest.builder()
+                .querySearchResults(querySearchResults)
+                .fetchSearchResultOptional(Optional.empty())
+                .normalizationTechnique(normalizationTechnique)
+                .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .searchPhaseContext(searchPhaseContext)
+                .pipelineProcessingContext(pipelineProcessingContext)
+                .explain(explain)
                 .build()
         );
     }

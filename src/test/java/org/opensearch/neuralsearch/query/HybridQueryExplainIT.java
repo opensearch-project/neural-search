@@ -751,6 +751,56 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testExplain_whenEnabled_thenScoresAndOrderMatchRequestWithoutExplain() {
+        String indexName = "test-hybrid-explain-scores-unchanged";
+        createIndex(
+            indexName,
+            String.format(
+                Locale.ROOT,
+                "{\"settings\": {\"number_of_shards\": 1, \"number_of_replicas\": 0}, \"mappings\": {\"properties\": {\"%s\": {\"type\": \"text\"}}}}",
+                TEST_TEXT_FIELD_NAME_1
+            )
+        );
+        // every document matches "spindle" with a different amount of padding, every even id also matches "motor"
+        List<Map<String, String>> docs = new ArrayList<>();
+        for (int id = 1; id <= 20; id++) {
+            String text = "spindle" + " w".repeat(id % 7) + (id % 2 == 0 ? " motor".repeat(1 + id % 3) : "");
+            docs.add(Map.of("id", Integer.toString(id), "text", text));
+        }
+        bulkAddDocuments(indexName, TEST_TEXT_FIELD_NAME_1, "_none", docs);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, "spindle"));
+        hybridQueryBuilder.add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, "motor"));
+
+        for (String technique : List.of("min_max", "z_score", "l2", "rrf")) {
+            String pipeline = "explain-scores-unchanged-" + technique;
+            if ("rrf".equals(technique)) {
+                createRRFSearchPipeline(pipeline, List.of(), true);
+            } else {
+                createSearchPipeline(pipeline, technique, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true);
+            }
+            List<Map<String, Object>> withoutExplain = getNestedHits(
+                search(indexName, hybridQueryBuilder, null, 20, Map.of("search_pipeline", pipeline), null)
+            );
+            List<Map<String, Object>> withExplain = getNestedHits(
+                search(indexName, hybridQueryBuilder, null, 20, Map.of("search_pipeline", pipeline, "explain", "true"), null)
+            );
+
+            assertEquals(technique, withoutExplain.size(), withExplain.size());
+            for (int i = 0; i < withoutExplain.size(); i++) {
+                assertEquals(technique + " _id at position " + i, withoutExplain.get(i).get("_id"), withExplain.get(i).get("_id"));
+                assertEquals(
+                    technique + " _score at position " + i,
+                    (double) withoutExplain.get(i).get("_score"),
+                    (double) withExplain.get(i).get("_score"),
+                    0.0
+                );
+            }
+        }
+    }
+
+    @SneakyThrows
     public void testExplain_whenMultipleSubqueriesAndOneShard_withMinScoreFilterNone_thenSuccessful() {
         testExplain_whenMultipleSubqueriesAndOneShard_withMinScore_thenSuccessful(0.0005f, 3, 3);
     }

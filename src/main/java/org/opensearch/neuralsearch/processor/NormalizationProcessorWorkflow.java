@@ -87,7 +87,8 @@ public class NormalizationProcessorWorkflow {
 
         boolean isSingleShard = getIsSingleShard(request);
 
-        explain(request, queryTopDocs, isSingleShard);
+        // explain normalization on the raw scores, before normalizeScores replaces them
+        Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = explainNormalization(request, queryTopDocs, isSingleShard);
 
         // Data transfer object for score normalization used to pass nullable rankConstant which is only used in RRF
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
@@ -99,6 +100,9 @@ public class NormalizationProcessorWorkflow {
         // normalize
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(normalizeScoresDTO);
+
+        // explain combination on the normalized scores, the ones combineScores reads
+        explain(request, queryTopDocs, normalizationExplain);
 
         Sort sort = evaluateSortCriteria(querySearchResults, queryTopDocs);
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
@@ -207,22 +211,42 @@ public class NormalizationProcessorWorkflow {
     }
 
     /**
-     * Collects explanations from normalization and combination techniques and save thme into pipeline context. Later that
-     * information will be read by the response processor to add it to search response
+     * Explains the normalization of the raw sub-query scores. Runs before normalizeScores: explain reads scoreDoc.score and
+     * leaves it unchanged, so on already normalized scores it would explain a second normalization.
+     * @return normalization explanations per document, or null when there is nothing to explain
      */
-    private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs, boolean isSingleShard) {
+    private Map<DocIdAtSearchShard, ExplanationDetails> explainNormalization(
+        final NormalizationProcessorWorkflowExecuteRequest request,
+        final List<CompoundTopDocs> queryTopDocs,
+        final boolean isSingleShard
+    ) {
+        if (!request.isExplain() || Objects.isNull(request.getPipelineProcessingContext())) {
+            return null;
+        }
+        ExplainDTO explainDTO = ExplainDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .explainableTechnique(request.getNormalizationTechnique())
+            .singleShard(isSingleShard)
+            .build();
+        return scoreNormalizer.explain(explainDTO);
+    }
+
+    /**
+     * Collects explanations from the combination technique on the normalized scores, pairs them with the normalization
+     * explanations and saves them into pipeline context. Later that information will be read by the response processor to
+     * add it to search response
+     */
+    private void explain(
+        final NormalizationProcessorWorkflowExecuteRequest request,
+        final List<CompoundTopDocs> queryTopDocs,
+        final Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain
+    ) {
         if (!request.isExplain()) {
             return;
         }
         // build final result object with all explain related information
         if (Objects.nonNull(request.getPipelineProcessingContext())) {
             Sort sortForQuery = evaluateSortCriteria(request.getQuerySearchResults(), queryTopDocs);
-            ExplainDTO explainDTO = ExplainDTO.builder()
-                .queryTopDocs(queryTopDocs)
-                .explainableTechnique(request.getNormalizationTechnique())
-                .singleShard(isSingleShard)
-                .build();
-            Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(explainDTO);
             Float minScore = getMinScore(request);
             Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
